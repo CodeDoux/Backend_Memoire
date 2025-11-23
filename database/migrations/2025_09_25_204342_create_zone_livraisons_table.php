@@ -13,7 +13,7 @@ return new class extends Migration
     {
         Schema::create('zone_livraisons', function (Blueprint $table) {
             $table->id();
-            $table->decimal('fraisLivraison',8,2);
+            $table->decimal('fraisLivraison',10,2);
             $table->string('nom');
             $table->timestamps();
         });

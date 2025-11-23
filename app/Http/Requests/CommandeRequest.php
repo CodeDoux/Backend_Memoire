@@ -20,7 +20,7 @@ class CommandeRequest extends FormRequest
             'produits.*.prix' => 'required|numeric|min:0',
             'produits.*.promo_id' => 'nullable|integer|exists:promotions,id',
 
-            'montant_total' => 'nullable|numeric|min:0',
+            'montantTotal' => 'nullable|numeric|min:0',
 
             // Nouveau champ code promo
             'code_promo_id' => 'nullable|integer|exists:code_promos,id',
@@ -28,18 +28,19 @@ class CommandeRequest extends FormRequest
             'infos_livraison' => 'required|array',
             'infos_livraison.nomComplet' => 'required|string|max:255',
             'infos_livraison.telephone' => 'required|string|max:20|regex:/^(\+221)?[0-9\s\-\(\)]{8,}$/',
-            'infos_livraison.adresse' => 'required|string|max:500',
+            'infos_livraison.quartier' => 'required|string|max:500',
             'infos_livraison.ville' => 'required|string|max:255',
+            'infos_livraison.rue' => 'nullable|string|max:255',
             'infos_livraison.codePostal' => 'nullable|string|max:10',
             'infos_livraison.commentaires' => 'nullable|string|max:1000',
             'infos_livraison.fraisLivraison' => 'nullable|numeric|min:0|max:50000',
 
             'infos_paiement' => 'required|array',
-            'infos_paiement.modePaiement' => 'required|in:livraison,enligne',
+            'infos_paiement.modePaiement' => 'required|in:EN_ESPECE,EN_LIGNE',
             'infos_paiement.numeroTelephone' => 'nullable|string|max:20|regex:/^(\+221)?[0-9\s\-\(\)]{8,}$/',
-            'infos_paiement.operateur' => 'nullable|in:orange_money,free_money,wave',
+            'infos_paiement.operateur' => 'nullable|in:ORANGE_MONEY,FREE_MONEY,WAVE',
 
-            'statut' => 'sometimes|string|in:en_preparation,prete,en_livraison,livree,annulee'
+            'statut' => 'sometimes|string|in:EN_PREPARATION,EN_ATTENTE,EN_LIVRAISON,LIVREE,ANNULEE'
         ];
     }
 
@@ -53,7 +54,7 @@ class CommandeRequest extends FormRequest
             'produits.*.quantite.required' => 'La quantité est obligatoire',
             'produits.*.quantite.min' => 'La quantité doit être d\'au moins 0.01',
 
-            'montant_total.min' => 'Le montant total ne peut pas être négatif',
+            'montantTotal.min' => 'Le montant total ne peut pas être négatif',
 
             'code_promo_id.exists' => 'Le code promo sélectionné n\'est pas valide',
 
@@ -61,13 +62,13 @@ class CommandeRequest extends FormRequest
             'infos_livraison.nomComplet.required' => 'Le nom complet est obligatoire',
             'infos_livraison.telephone.required' => 'Le téléphone est obligatoire',
             'infos_livraison.telephone.regex' => 'Le numéro doit être valide et commencer par +221 ou être un numéro local',
-            'infos_livraison.adresse.required' => 'L\'adresse est obligatoire',
+            'infos_livraison.quartier.required' => 'quartier est obligatoire',
             'infos_livraison.ville.required' => 'La ville est obligatoire',
             'infos_livraison.fraisLivraison.max' => 'Les frais de livraison ne peuvent pas dépasser 50 000 FCFA',
 
             'infos_paiement.required' => 'Les informations de paiement sont obligatoires',
             'infos_paiement.modePaiement.required' => 'Le mode de paiement est obligatoire',
-            'infos_paiement.modePaiement.in' => 'Le mode de paiement doit être "livraison" ou "enligne"',
+            'infos_paiement.modePaiement.in' => 'Le mode de paiement doit être "EN_ESPECE" ou "EN_LIGNE"',
             'infos_paiement.numeroTelephone.regex' => 'Le format du numéro de téléphone n\'est pas valide',
             'infos_paiement.operateur.in' => 'L\'opérateur doit être Orange Money, Free Money ou Wave',
         ];
@@ -81,7 +82,7 @@ class CommandeRequest extends FormRequest
 
             $infosLivraison['nomComplet'] = ucwords(strtolower(trim($infosLivraison['nomComplet'] ?? '')));
             $infosLivraison['telephone'] = preg_replace('/\D+/', '', $infosLivraison['telephone'] ?? '');
-            $infosLivraison['adresse'] = trim($infosLivraison['adresse'] ?? '');
+            $infosLivraison['quartier'] = trim($infosLivraison['quartier'] ?? '');
             $infosLivraison['ville'] = strtoupper(trim($infosLivraison['ville'] ?? ''));
 
             $this->merge(['infos_livraison' => $infosLivraison]);

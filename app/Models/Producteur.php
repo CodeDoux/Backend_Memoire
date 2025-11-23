@@ -24,4 +24,8 @@ class Producteur extends Model
     {
         return $this->hasMany(Produit::class);
     }
+    public function abonnements()
+    {
+        return $this->hasMany(Abonnement::class);
+    }
 }

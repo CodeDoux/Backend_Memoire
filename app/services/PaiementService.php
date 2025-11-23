@@ -27,7 +27,7 @@ class PaiementService
             }
 
             // Générer une référence de transaction si paiement en ligne
-            if ($data['mode_paiement'] === 'en_ligne') {
+            if ($data['modePaiement'] === 'EN_LIGNE') {
                 $data['reference_transaction'] = $this->genererReferenceTransaction();
             }
 
@@ -92,7 +92,7 @@ class PaiementService
     return DB::transaction(function () use ($paiementId, $numeroTelephone, $operateur) {
         $paiement = Paiement::findOrFail($paiementId);
 
-        if ($paiement->mode_paiement !== 'en_ligne') {
+        if ($paiement->modePaiement !== 'EN_LIGNE') {
             throw new \Exception('Ce paiement n\'est pas configuré pour le mobile money');
         }
 
@@ -151,7 +151,7 @@ class PaiementService
     public function getPaiementsParMode($mode)
     {
         return Paiements::with(['commande.user:id,nomComplet,email'])
-            ->where('mode_paiement', $mode)
+            ->where('modePaiement', $mode)
             ->orderBy('created_at', 'desc')
             ->get();
     }
@@ -163,7 +163,7 @@ class PaiementService
     {
         return Paiement::with(['commande.user:id,nomComplet,email'])
             ->where('operateur', $operateur)
-            ->where('mode_paiement', 'en_ligne')
+            ->where('modePaiement', 'EN_LIGNE')
             ->orderBy('created_at', 'desc')
             ->get();
     }
@@ -217,25 +217,25 @@ class PaiementService
             default => Carbon::now()->startOfMonth()
         };
 
-        $paiementsParMode = Paiement::selectRaw('mode_paiement, COUNT(*) as count, SUM(montant_payé) as total')
+        $paiementsParMode = Paiement::selectRaw('modePaiement, COUNT(*) as count, SUM(montant_payé) as total')
             ->where('created_at', '>=', $dateDebut)
             ->where('statut', 'payée')
-            ->groupBy('mode_paiement')
+            ->groupBy('modePaiement')
             ->get();
 
         $paiementsParOperateur = Paiement::selectRaw('operateur, COUNT(*) as count, SUM(montant_payé) as total')
             ->where('created_at', '>=', $dateDebut)
-            ->where('statut', 'payée')
-            ->where('mode_paiement', 'en_ligne')
+            ->where('statut', 'PAYEE')
+            ->where('modePaiement', 'EN_LIGNE')
             ->groupBy('operateur')
             ->get();
 
         return [
             'total_paiements' => Paiement::where('created_at', '>=', $dateDebut)->count(),
-            'paiements_reussis' => Paiement::where('created_at', '>=', $dateDebut)->where('statut', 'payée')->count(),
-            'paiements_en_attente' => Paiement::whereIn('statut', ['non_payée', 'en_cours'])->count(),
+            'paiements_reussis' => Paiement::where('created_at', '>=', $dateDebut)->where('statut', 'PAYEE')->count(),
+            'paiements_en_attente' => Paiement::whereIn('statut', ['NON_PAYEE', 'EN_COURS'])->count(),
             'paiements_echec' => Paiement::where('created_at', '>=', $dateDebut)->where('statut', 'échec')->count(),
-            'revenus_total' => Paiement::where('created_at', '>=', $dateDebut)->where('statut', 'payée')->sum('montant_payé'),
+            'revenus_total' => Paiement::where('created_at', '>=', $dateDebut)->where('statut', 'PAYEE')->sum('montant_payé'),
             'revenus_par_mode' => $paiementsParMode,
             'revenus_par_operateur' => $paiementsParOperateur,
             'montant_moyen' => Paiement::where('created_at', '>=', $dateDebut)->where('statut', 'payée')->avg('montant_payé')
@@ -257,15 +257,15 @@ class PaiementService
                 'transactions_reussies' => Paiement::whereBetween('created_at', [$dateDebut, $dateFin])->where('statut', 'payée')->count(),
                 'revenus_total' => Paiement::whereBetween('date_paiement', [$dateDebut, $dateFin])->where('statut', 'payée')->sum('montant_payé')
             ],
-            'details_par_mode' => Paiement::selectRaw('mode_paiement, COUNT(*) as transactions, SUM(montant_payé) as revenus')
+            'details_par_mode' => Paiement::selectRaw('modePaiement, COUNT(*) as transactions, SUM(montant_payé) as revenus')
                 ->whereBetween('created_at', [$dateDebut, $dateFin])
-                ->where('statut', 'payée')
-                ->groupBy('mode_paiement')
+                ->where('statut', 'PAYEE')
+                ->groupBy('modePaiement')
                 ->get(),
             'details_par_operateur' => Paiement::selectRaw('operateur, COUNT(*) as transactions, SUM(montant_payé) as revenus')
                 ->whereBetween('created_at', [$dateDebut, $dateFin])
-                ->where('statut', 'payée')
-                ->where('mode_paiement', 'en_ligne')
+                ->where('statut', 'PAYEE')
+                ->where('modePaiement', 'EN_LIGNE')
                 ->groupBy('operateur')
                 ->get()
         ];
@@ -325,7 +325,7 @@ class PaiementService
         // Créer un remboursement
         $remboursement = Paiement::create([
             'commande_id' => $paiement->commande_id,
-            'mode_paiement' => $paiement->mode_paiement,
+            'modePaiement' => $paiement->modePaiement,
             'montant_payé' => -$montantRemboursement,
             'statut' => 'remboursé',
             'date_paiement' => now(),

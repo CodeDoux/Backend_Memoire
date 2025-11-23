@@ -11,13 +11,11 @@ return new class extends Migration
      */
     public function up(): void
     {
-        Schema::create('notifications', function (Blueprint $table) {
+        Schema::create('code_lists', function (Blueprint $table) {
             $table->id();
-            $table->foreignId('client_id')->constrained('users')->onDelete('cascade');
-            $table->foreignId('employe_id')->constrained('users')->onDelete('cascade');
-            $table->string('message');
-            $table->boolean('est_lu');
-            $table->integer('emeteur');
+            $table->string('type'); // ex: 'TYPE_ABONNEMENT', 'MODE_PAIEMENT', etc.
+            $table->string('value'); // ex: 'PREMIUM', 'WAVE'
+            $table->string('description')->nullable();
             $table->timestamps();
         });
     }
@@ -27,6 +25,6 @@ return new class extends Migration
      */
     public function down(): void
     {
-        Schema::dropIfExists('notifications');
+        Schema::dropIfExists('code_lists');
     }
 };

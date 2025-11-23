@@ -11,14 +11,12 @@ return new class extends Migration
      */
     public function up(): void
     {
-        Schema::create('details_commandes', function (Blueprint $table) {
+        Schema::create('ligne_commandes', function (Blueprint $table) {
             $table->id();
-            $table->decimal('prix',8,2);
+            $table->decimal('prix',10,2);
             $table->decimal('quantite',8,2);
-            $table->string('libelle');
-            $table->string('image');
-            $table->string('code');
-            $table->decimal('montant_total',10,2);
+            $table->decimal('montantLigne',10,2);
+            $table->decimal('reduction',10,2);
             $table->foreignId('produit_id')->constrained('produits')->onDelete('cascade');
             $table->foreignId('commande_id')->constrained('commandes')->onDelete('cascade');
             $table->timestamps();
@@ -30,6 +28,6 @@ return new class extends Migration
      */
     public function down(): void
     {
-        Schema::dropIfExists('details_commandes');
+        Schema::dropIfExists('ligne_commandes');
     }
 };

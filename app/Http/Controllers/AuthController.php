@@ -25,26 +25,61 @@ class AuthController extends Controller
     }
 
     // Création d'un utilisateur par un admin
-    public function store(Request $request)
-    {
-        $validated = $request->validate([
-            'nomComplet' => 'required|string|max:255',
-            'email' => 'required|string|email|unique:users',
-            'password' => 'required|string|min:5',
-            'role' => 'in:ADMIN,PRO,CLIENT',
-            'tel'=>'nullable|string|max:20|regex:/^(\+221)?[0-9\s\-\(\)]{8,}$/',
-        ]);
+ public function store(Request $request)
+{
+    $validated = $request->validate([
+        'nomComplet' => 'required|string|max:255',
+        'email' => 'required|string|email|unique:users',
+        'password' => 'required|string|min:5',
+        'role' => 'in:ADMIN,PRO,CLIENT',
+        'tel' => 'nullable|string|max:20|regex:/^(\+221)?[0-9\s\-\(\)]{8,}$/',
+    ]);
 
-        $user = User::create([
-            'nomComplet' => $validated['nomComplet'],
-            'email' => $validated['email'],
-            'password' => bcrypt($validated['password']),
-            'role' => strtoupper($request->role ?? 'CLIENT'),
-            'tel'=>$validated['tel'],
-        ]);
+    // ✅ Création de l’utilisateur
+    $user = User::create([
+        'nomComplet' => $validated['nomComplet'],
+        'email' => $validated['email'],
+        'password' => bcrypt($validated['password']),
+        'role' => strtoupper($request->role ?? 'CLIENT'),
+        'tel' => $validated['tel'] ?? null,
+    ]);
 
-        return response()->json($user, 201, [], JSON_UNESCAPED_UNICODE);
+    // ✅ Si le rôle est CLIENT → créer son profil client
+    if ($user->role === 'CLIENT') {
+
+        $adresseLivraison = null;
+        $adresseFacturation = null;
+
+        if ($request->has('adresseLivraison')) {
+            $adresseLivraison = Adresse::create([
+                'rue' => $request->input('adresseLivraison.rue'),
+                'ville' => $request->input('adresseLivraison.ville'),
+                'quartier' => $request->input('adresseLivraison.quartier'),
+                'codePostal' => $request->input('adresseLivraison.codePostal'),
+            ]);
+        }
+
+        if ($request->has('adresseFacturation')) {
+            $adresseFacturation = Adresse::create([
+                'rue' => $request->input('adresseFacturation.rue'),
+                'ville' => $request->input('adresseFacturation.ville'),
+                'quartier' => $request->input('adresseFacturation.quartier'),
+                'codePostal' => $request->input('adresseFacturation.codePostal'),
+            ]);
+        }
+
+        Client::create([
+            'user_id' => $user->id,
+            'adresseLivraison_id' => $adresseLivraison?->id,
+            'adresseFacturation_id' => $adresseFacturation?->id,
+        ]);
     }
+
+    return response()->json([
+        'message' => 'Utilisateur créé avec succès',
+        'data' => $user
+    ], 201, [], JSON_UNESCAPED_UNICODE);
+}
 
     // Inscription par l'utilisateur
     public function register(Request $request)
@@ -141,4 +176,10 @@ class AuthController extends Controller
             "message" => "Utilisateur supprimé avec succès"
         ], 200);
     }
+    public function user(Request $request)
+{
+    $user = $request->user()->load('producteur'); // ajoute la relation
+
+    return response()->json($user);
+}
 }

@@ -5,6 +5,7 @@ namespace App\Http\Controllers;
 use Illuminate\Http\Request;
 use App\services\CommandeService;
 use App\Http\Requests\CommandeRequest;
+use App\Models\Commande;
 
 class CommandeController extends Controller
 {
@@ -13,6 +14,37 @@ class CommandeController extends Controller
     public function __construct(CommandeService $commandeService)
     {
         $this->commandeService = $commandeService;
+    }
+
+    public function indexAdmin(){
+        // chargement explicite des relations
+        $commandes = Commande::with([
+            'user:id,nomComplet,email',
+            'LigneCommande', // la relation principale
+            'LigneCommande.produit:id,nom,prix,description', // Puis les sous-relations
+            'paiement:id,commande_id,statut,modePaiement,montant_paye,date_paiement',
+            'livraison:id,commande_id,statut,adresse_livraison,date_livraison,frais_livraison'
+        ]);
+        return $commandes;
+    }
+
+
+    public function stats()
+    {
+        try {
+            return response()->json([
+                'pending'   => Commande::where('statut', 'EN_ATTENTE')->count(),
+                'processing'=> Commande::where('statut', 'EN_PREPARATION')->count(),
+                'delivery'  => Commande::where('statut', 'EN_LIVRAISON')->count(),
+                'completed' => Commande::where('statut', 'LIVREE')->count(),
+            ], 200);
+
+        } catch (\Exception $e) {
+            return response()->json([
+                'message' => 'Erreur lors de la récupération des statistiques',
+                'error'   => $e->getMessage()
+            ], 500);
+        }
     }
 
     public function index()

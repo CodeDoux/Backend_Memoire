@@ -11,14 +11,11 @@ return new class extends Migration
      */
     public function up(): void
     {
-        Schema::create('code_promos', function (Blueprint $table) {
+        Schema::create('promo_produits', function (Blueprint $table) {
             $table->id();
-            $table->string('code')->unique(); // ex: WELCOME10
-            $table->string('description')->nullable();
-            $table->date('dateDebut');
-            $table->date('dateFin');
-            $table->decimal('reduction',10,2);
-            $table->boolean('actif')->default(true);
+            $table->foreignId('produit_id')->constrained('produits')->onDelete('cascade');
+            $table->foreignId('promo_id')->constrained('promotions')->onDelete('cascade');
+            $table->decimal('montantReduction', 10, 2)->nullable();
             $table->timestamps();
         });
     }
@@ -28,6 +25,6 @@ return new class extends Migration
      */
     public function down(): void
     {
-        Schema::dropIfExists('code_promos');
+        Schema::dropIfExists('promo_produits');
     }
 };

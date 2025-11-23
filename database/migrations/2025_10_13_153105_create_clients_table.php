@@ -11,13 +11,11 @@ return new class extends Migration
      */
     public function up(): void
     {
-        Schema::create('producteurs', function (Blueprint $table) {
+        Schema::create('clients', function (Blueprint $table) {
             $table->id();
-            $table->string('entreprise');
-            $table->string('description')->nullable();
-            $table->string('ninea')->unique();
-            $table->string('emailPro')->unique();
-            $table->string('telPro');
+            // Références vers la table adresses
+            $table->foreignId('adresseLivraison_id')->nullable()->constrained('adresses')->onDelete('set null');
+            $table->foreignId('adresseFacturation_id')->nullable()->constrained('adresses')->onDelete('set null');
             $table->foreignId('user_id')->constrained('users')->onDelete('cascade');
             $table->timestamps();
         });
@@ -28,6 +26,6 @@ return new class extends Migration
      */
     public function down(): void
     {
-        Schema::dropIfExists('producteurs');
+        Schema::dropIfExists('clients');
     }
 };

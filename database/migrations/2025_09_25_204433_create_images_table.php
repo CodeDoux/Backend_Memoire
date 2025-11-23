@@ -14,7 +14,9 @@ return new class extends Migration
         Schema::create('images', function (Blueprint $table) {
             $table->id();
             $table->string('chemin');
-            $table->boolean('is_primary');
+            $table->boolean('isPrimary');
+            $table->date('dateCreation')->useCurrent();
+            $table->string('altText');
             $table->foreignId('produit_id')->constrained('produits')->onDelete('cascade');
             $table->timestamps();
         });

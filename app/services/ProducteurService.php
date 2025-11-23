@@ -3,6 +3,9 @@
 namespace App\Services;
 
 use App\Models\Producteur;
+use App\Models\User;
+use Illuminate\Support\Facades\DB;
+use Illuminate\Validation\ValidationException;
 
 class ProducteurService
 {
@@ -19,6 +22,7 @@ class ProducteurService
         $user = User::create([
             'nomComplet' => $data['nomComplet'],
             'email' => $data['email'],
+            'tel' => $data['telephone'],
             'password' => bcrypt($data['password']),
             'role' => 'PRO',
         ]);
@@ -26,10 +30,11 @@ class ProducteurService
         // 2. Créer le producteur associé
         $producteur = Producteur::create([
             'user_id' => $user->id,
-            'adresse' => $data['adresse'] ?? null,
-            'telephone' => $data['telephone'] ?? null,
-            'specialite' => $data['specialite'] ?? null,
-            'experience' => $data['experience'] ?? null,
+            'entreprise' => $data['entreprise'] ?? null,
+            'description' => $data['description'] ?? null,
+            'ninea' => $data['ninea'] ?? null,
+            'emailPro' => $data['emailPro'] ?? null,
+            'telPro' => $data['telPro'] ?? null,
         ]);
 
         return $producteur->load('utilisateur');

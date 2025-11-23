@@ -13,11 +13,15 @@ return new class extends Migration
     {
         Schema::create('livraisons', function (Blueprint $table) {
             $table->id();
+            $table->string('reference')->unique();
+            $table->date('dateExpedition')->nullable();
+            $table->date('dateLivraison')->nullable();
+            // CodeList: STATUT_LIVRAISON
+            //$table->foreignId('statut_id')->constrained('code_lists')->onDelete('cascade');
+            $table->enum('statutLivraison', ['EN_COURS','LIVREE','NON_LIVREE']);
             $table->foreignId('commande_id')->constrained('commandes')->onDelete('cascade');
-            $table->date('date_livraison');
-            $table->string('adresse_livraison');
-            $table->string('statut');
-            $table->foreignId('zonelivraison_id')->constrained('zone_livraisons')->onDelete('cascade');
+            $table->string('adresseLivraison_id')->constrained('adresses')->onDelete('set null');
+            $table->foreignId('zoneLivraison_id')->constrained('zone_livraisons')->onDelete('cascade');
             $table->timestamps();
         });
     }

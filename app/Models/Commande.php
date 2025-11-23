@@ -9,8 +9,11 @@ class Commande extends Model
 {
     use HasFactory;
     protected $fillable = [
+        'reference',
+        'dateCommande',
         'client_id',
-        'montant_total',
+        'montantTotal',
+        'modeLivraison',
         'statut',
         'infos_livraison',
         'infos_paiement',
@@ -36,9 +39,9 @@ class Commande extends Model
     }
 
     // Une commande contient plusieurs produits via detailsCommande
-    public function detailsCommande()
+    public function LigneCommande()
     {
-        return $this->hasMany(DetailsCommande::class, 'commande_id');
+        return $this->hasMany(LigneCommande::class, 'commande_id');
     }
     //pour récupérer tous les produits
     public function produits()
@@ -76,8 +79,8 @@ class Commande extends Model
             return $item->quantite * $item->prix;
         });
     }
-    public function codePromo()
+    public function Promotion()
 {
-    return $this->belongsTo(CodePromo::class);
+    return $this->belongsTo(Promotion::class);
 }
 }

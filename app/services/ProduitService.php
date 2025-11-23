@@ -14,51 +14,70 @@ class ProduitService
      */
     public function index()
     {
-        return Produit::with(['categorie', 'images'])->get();
+        return Produit::with(['categorie', 'producteur', 'images'])->get();
     }
 
     /**
      * Créer un produit
      */
-    public function store(array $data)
+   public function store(array $data)
 {
     return DB::transaction(function () use ($data) {
         try {
-            // 1. Créer le produit
-            $produit = Produit::create($data);
+            // 1️⃣ Créer le produit
+            $produit = Produit::create([
+                'nom' => $data['nom'],
+                'description' => $data['description'],
+                'stock' => $data['stock'],
+                'prix' => $data['prix'],
+                'poids' => $data['poids'] ?? null,
+                'saison' => $data['saison']?? null,
+                'note' => $data['note'],
+                'seuilAlerteStock' => $data['seuilAlerteStock'],
+                'categorie_id' => $data['categorie_id'],
+                'producteur_id' => $data['producteur_id'],
+                'statut' => $data['statut'] ?? 'DISPONIBLE',
+                'validationAdmin' => $data['validationAdmin'] ?? 'EN_ATTENTE',
+                'dateAjout' => now(),
+            ]);
 
-            // 2. Sauvegarder les images
-            if (isset($data['images'])) {
+            // 2️⃣ Sauvegarder les images si elles existent
+            if (!empty($data['images']) && is_array($data['images'])) {
                 foreach ($data['images'] as $index => $imageFile) {
                     if (!$imageFile->isValid()) {
                         throw new \Exception("Erreur lors du téléchargement de l'image.");
                     }
 
-                    // Stockage dans storage/app/public/produits
+                    // Sauvegarde du fichier dans storage/app/public/produits
                     $path = $imageFile->store('produits', 'public');
 
                     if (!$path) {
                         throw new \Exception("Impossible de sauvegarder l'image.");
                     }
 
+                    // 3️⃣ Créer l’enregistrement image lié au produit
                     $produit->images()->create([
                         'chemin' => $path,
-                        'is_primary' => $index === 0
+                        'isPrimary' => $index===0, // ✅ corrige le nom de la colonne
+                        'dateCreation' => now(),
+                        'altText' => $produit->nom . " image " . ($index + 1),
+                        'producteur_id'=>$produit['id'],
                     ]);
                 }
             }
 
+            // 4️⃣ Retourner le produit avec ses relations
             return $produit->load('categorie', 'images');
+
         } catch (\Exception $e) {
-            //  Annule la transaction
+            // 🧨 En cas d'erreur, rollback et suppression fichiers
             DB::rollBack();
 
-            // Supprime les fichiers déjà uploadés si erreur
             if (isset($path) && \Storage::disk('public')->exists($path)) {
                 \Storage::disk('public')->delete($path);
             }
 
-            throw $e; // on relance l’erreur pour qu’elle soit captée par le contrôleur
+            throw $e;
         }
     });
 }
@@ -112,7 +131,10 @@ class ProduitService
 
                     $produit->images()->create([
                         'chemin' => $path,
-                        'is_primary' => $index === 0 && !$produit->images()->where('is_primary', true)->exists()
+                        'isPrimary' => $index===0, 
+                        'dateCreation' => now(),
+                        'altText' => $produit->nom . " image " . ($index + 1),
+                        'producteur_id'=>$produit['id'],
                     ]);
                 }
             }

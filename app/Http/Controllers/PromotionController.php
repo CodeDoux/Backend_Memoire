@@ -5,6 +5,10 @@ namespace App\Http\Controllers;
 use Illuminate\Http\Request;
 use App\services\PromotionService;
 use App\Http\Requests\PromotionRequest;
+use Illuminate\Support\Facades\Auth;
+use App\Models\Promotion;
+use App\Models\Produit;
+use Illuminate\Support\Facades\Log;
 
 class PromotionController extends Controller
 {
@@ -16,6 +20,39 @@ class PromotionController extends Controller
     public function __construct(PromotionService $promotionService)
     {
         $this->promotionService = $promotionService;
+    }
+
+     // ✅ Lister les promotions d’un producteur connecté
+    public function promotionByProducteur()
+    {
+        $user = Auth::user();
+
+    // 🛑 Vérifie que l'utilisateur est un producteur
+    if ($user->role !== 'PRO') {
+        return response()->json(['message' => 'Accès refusé'], 403);
+    }
+
+    // 🟢 Vérifie que le producteur existe bien
+    $producteur = $user->producteur;
+    if (!$producteur) {
+        return response()->json(['message' => 'Aucun profil producteur associé à cet utilisateur'], 404);
+    }
+
+    // ✅ Récupère toutes les promotions liées aux produits de ce producteur
+    $promotions = Promotion::whereHas('produits', function ($query) use ($producteur) {
+            $query->where('producteur_id', $producteur->id);
+        })
+        ->with([
+            'produits:id,nom,prix,producteur_id',
+            'type:id,value'
+        ])
+        ->orderBy('dateFin', 'desc')
+        ->get();
+
+    return response()->json([
+        'message' => 'Promotions du producteur récupérées avec succès',
+        'promotions' => $promotions
+    ], 200, [], JSON_UNESCAPED_UNICODE);
     }
 
     public function index()
@@ -36,6 +73,9 @@ class PromotionController extends Controller
      */
         public function store(PromotionRequest $request)
     {
+        if ($request->has('code') && $request->input('code') === null) {
+        $request->merge(['code' => '']); // ou générer un code automatique si tu veux
+         }
         try {
             $validatedData = $request->validated();
 
@@ -81,7 +121,11 @@ class PromotionController extends Controller
      */
     public function update(PromotionRequest $request, string $id)
     {
+        
         try {
+            if ($request->has('code') && $request->input('code') === null) {
+        $request->merge(['code' => '']); // ou générer un code automatique si tu veux
+        }
             $validatedData = $request->validate();
 
             $promotion = $this->promotionService->update($validatedData, $id);
@@ -184,13 +228,12 @@ class PromotionController extends Controller
     {
         try {
             $validatedData = $request->validate([
-                'active' => 'required|boolean'
-            ]);
+            'estActif' => 'required|boolean'
+        ]);
 
-            $promotion = $this->promotionService->togglePromotion($id, $validatedData['active']);
-
+           $promotion = $this->promotionService->togglePromotion($id, $validatedData['estActif']);
             return response()->json([
-                'message' => $promotion->actif ? 'Promotion activée' : 'Promotion désactivée',
+                'message' => $promotion->estActif ? 'Promotion activée' : 'Promotion désactivée',
                 'promotion' => $promotion
             ], 200);
 
@@ -250,13 +293,13 @@ class PromotionController extends Controller
             // Validation des données
             $validatedData = $request->validate([
                 'produit_id' => 'required|exists:produits,id',
-                'montant_reduction' => 'nullable|numeric|min:0'
+                'montantReduction' => 'nullable|numeric|min:0'
             ]);
 
             Log::info('Données validées:', $validatedData);
 
             // Vérifier que le produit existe
-            $produit = \App\Models\Produits::find($validatedData['produit_id']);
+            $produit = Produit::find($validatedData['produit_id']);
             if (!$produit) {
                 Log::error("Produit non trouvé avec ID: " . $validatedData['produit_id']);
                 return response()->json([
@@ -268,7 +311,7 @@ class PromotionController extends Controller
             $association = $this->promotionService->associerProduitPromotion(
                 $id,
                 $validatedData['produit_id'],
-                $validatedData['montant_reduction'] ?? null
+                $validatedData['montantReduction'] ?? null
             );
 
             Log::info('Association créée avec succès:', ['association' => $association]);

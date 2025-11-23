@@ -2,14 +2,19 @@
 
 namespace App\services;
 
-use App\Models\DetailsCommande;
+use App\Models\LigneCommande;
 use App\Models\Commande;
 use App\Models\Produit;
+use App\Models\Livraison;
+use App\Models\Paiement;
+use App\Models\Adresse;
+use App\Models\ZoneLivraison;
 use App\services\LivraisonService;
 use App\services\PaiementService;
 use App\services\PromotionService;
 use Carbon\Carbon;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Str;
 
 class CommandeService
 {
@@ -25,6 +30,8 @@ class CommandeService
         $this->paiementService = $paiementService;
         $this->promotionService = $promotionService;
     }
+
+    
     public function index()
     {
         $user = auth()->user();
@@ -32,9 +39,9 @@ class CommandeService
         // chargement explicite des relations
         $query = Commande::with([
             'user:id,nomComplet,email',
-            'detailsCommande', // la relation principale
-            'detailsCommande.produit:id,nom,prix,description', // Puis les sous-relations
-            'paiement:id,commande_id,statut,mode_paiement,montant_paye,date_paiement',
+            'LigneCommande', // la relation principale
+            'LigneCommande.produit:id,nom,prix,description', // Puis les sous-relations
+            'paiement:id,commande_id,statut,modePaiement,montant_paye,date_paiement',
             'livraison:id,commande_id,statut,adresse_livraison,date_livraison,frais_livraison'
         ]);
 
@@ -66,10 +73,16 @@ class CommandeService
             $totalCalcule = $this->calculerTotalAvecPromotions($data['produits'],$data['codePromo'] ?? null);
 
             // 2. Créer la commande
+            do {
+                $reference = 'CMD-' . strtoupper(Str::random(10));
+            } while (Commande::where('reference', $reference)->exists());
             $commande = Commande::create([
+                'modeLivraison'=>'DOMICILE',
+                'dateCommande'=> now(),
+                'reference' => $reference,
                 'client_id' => $data['client_id'],
-                'montant_total' => $totalCalcule['total_avec_promotions'] + ($data['frais_livraison'] ?? 0),
-                'statut' => 'en_préparation'
+                'montantTotal' => $totalCalcule['total_avec_promotions'] + ($data['frais_livraison'] ?? 0),
+                'statut' => 'EN_ATTENTE'
             ]);
 
             // 3. Ajouter les produits avec promotions
@@ -83,7 +96,7 @@ class CommandeService
 
             // 5. Créer le paiement via le service dédié
             if (isset($data['infos_paiement'])) {
-                $paiementData = $this->prepareDataPaiement($commande->id, $data['infos_paiement'], $commande->montant_total);
+                $paiementData = $this->prepareDataPaiement($commande->id, $data['infos_paiement'], $commande->montantTotal);
                 $this->paiementService->store($paiementData);
             }
 
@@ -97,9 +110,10 @@ class CommandeService
             'user:id,nomComplet,email',
             'livraison',
             'paiement',
-            'detailsCommande' => function($query) {
+            'LigneCommande' => function($query) {
                 $query->with([
-                    'produit:id,nom,prix,image,description',
+                    'produit:id,nom,prix,description',
+                    'produit.images',
                     'promotion:id,nom,reduction,dateDebut,dateFin'
                 ]);
             }
@@ -140,7 +154,7 @@ class CommandeService
             }
 
             // Supprimer les produits de la commande
-            $commande->detailsCommande()->delete();
+            $commande->LigneCommande()->delete();
 
             // Supprimer la commande
             return $commande->delete();
@@ -149,14 +163,15 @@ class CommandeService
     public function getByClient($clientId)
     {
         return Commande::with([
-            'detailsCommande' => function($query) {
+            'LigneCommande' => function($query) {
                 $query->with([
-                    'produit:id,nom,prix,image',
+                    'produit:id,nom,prix',
+                    'produit.images',
                     'promotion:id,nom,reduction,dateDebut,dateFin'
                 ]);
             },
             'user:id,nomComplet,email',
-            'paiement:id,commande_id,statut,mode_paiement',
+            'paiement:id,commande_id,statut,modePaiement',
             'livraison:id,commande_id,statut,adresse_livraison,date_livraison,frais_livraison'
         ])->where('client_id', $clientId)
             ->orderBy('created_at', 'desc')
@@ -173,7 +188,7 @@ public function calculerTotalAvecPromotions(array $produits, $codePromo = null)
     $economiesRealisees = 0;
 
     foreach ($produits as $produitData) {
-        $produit = Produits::findOrFail($produitData['produit_id']);
+        $produit = Produit::findOrFail($produitData['produit_id']);
         $prixUnitaire = $produit->prix;
         $quantite = $produitData['quantite'];
 
@@ -238,15 +253,14 @@ public function calculerTotalAvecPromotions(array $produits, $codePromo = null)
                 $promoId = null;
             }
 
-            DetailsCommande::create([
+            LigneCommande::create([
                 'commande_id' => $commandeId,
                 'produit_id' => $produitData['produit_id'],
                 'quantite' => $quantite,
                 'prix' => $prixUnitaire, // S'assurer que ce champ est toujours rempli
-                'montant_total' => $montantTotal,
-                'libelle'=>$produitData['nom'],
-                'code'=>$produitData['code'],
-                'image'=>$produitData['image'],
+                'montantLigne' => $montantTotal,
+                'reduction' => $promotion ? ($prixUnitaire * ($promotion->reduction / 100)) : 0
+    
             ]);
 
             // Décrémenter le stock
@@ -259,18 +273,32 @@ public function calculerTotalAvecPromotions(array $produits, $codePromo = null)
      */
     private function prepareDataLivraison($commandeId, array $infosLivraison)
     {
-        $adresseLivraison = "{$infosLivraison['adresse']}, {$infosLivraison['ville']}";
+        $adresseLivraison = "{$infosLivraison['quartier']}, {$infosLivraison['ville']}";
         if (!empty($infosLivraison['codePostal'])) {
             $adresseLivraison .= " {$infosLivraison['codePostal']}";
         }
-
+        do {
+             $reference = 'LIV-' . strtoupper(Str::random(10));
+        } while (Livraison::where('reference', $reference)->exists());
+         $adresse = Adresse::firstOrCreate([
+        'rue' => $infosLivraison['rue'],
+        'ville' => $infosLivraison['ville'],
+        'codePostal' => $infosLivraison['codePostal'] ?? $infosLivraison['code_postal'] ?? null,
+        'quartier' => $infosLivraison['quartier'],
+    ]);      
+    $zoneLivraison = ZoneLivraison::firstOrCreate(
+         ['nom' =>'Dakar'],
+      ['fraisLivraison' => $infosLivraison['fraisLivraison'] ?? 0]
+     );    
         return [
+            'reference' => $reference,
             'commande_id' => $commandeId,
-            'adresse_livraison' => $adresseLivraison,
-            'date_livraison' => now()->addDay()->format('Y-m-d H:i:s'),
-            'statut' => 'non_livrée',
-            'note' => $infosLivraison['commentaires'] ?? null,
-            'frais_livraison' => $infosLivraison['fraisLivraison'] ?? 0
+            'zoneLivraison_id' => $zoneLivraison->id,
+            'adresseLivraison_id' => $adresse->id,
+            'dateLivraison' => now()->addDay()->format('Y-m-d H:i:s'),
+            'dateExpedition' => now()->addDay()->format('Y-m-d H:i:s'),
+            'statutLivraison' => 'NON_LIVREE',
+            'fraisLivraison' => $infosLivraison['fraisLivraison'] ?? 0
         ];
     }
      /**
@@ -278,16 +306,21 @@ public function calculerTotalAvecPromotions(array $produits, $codePromo = null)
      */
     private function prepareDataPaiement($commandeId, array $infosPaiement, $montantTotal)
     {
-        $modePaiement = $infosPaiement['modePaiement'] === 'enligne' ? 'en_ligne' : 'à_la_livraison';
+        $modePaiement = $infosPaiement['modePaiement'] === 'enligne' ? 'EN_LIGNE' : 'EN_ESPECE';
 
+        do {
+             $reference = 'LIV-' . strtoupper(Str::random(10));
+        } while (Paiement::where('reference', $reference)->exists());
         return [
+            'reference' => $reference,
             'commande_id' => $commandeId,
-            'mode_paiement' => $modePaiement,
-            'montant_payé' => $montantTotal,
-            'date_paiement' => now()->format('Y-m-d H:i:s'),
-            'statut' => 'non_payée',
-            'numero_telephone' => $infosPaiement['numeroTelephone'] ?? null,
-            'operateur' => $infosPaiement['operateur'] ?? null
+            'modePaiement' => $modePaiement,
+            'montant' => $montantTotal,
+            'datePaiement' => now()->format('Y-m-d H:i:s'),
+            'statutPaiement' => 'NON_PAYEE',
+            'telephone' => $infosPaiement['numeroTelephone'] ?? null,
+            'operateur' => $infosPaiement['operateur'] ?? null,
+            'typePaiement' => 'COMMANDE'
         ];
     }
 
@@ -308,7 +341,7 @@ public function calculerTotalAvecPromotions(array $produits, $codePromo = null)
 
         // Mettre à jour le statut de paiement si nécessaire
         if ($commande->paiement && $nouveauStatut === 'livrée' &&
-            $commande->paiement->mode_paiement === 'à_la_livraison') {
+            $commande->paiement->modePaiement === 'à_la_livraison') {
             $this->paiementService->update([
                 'statut' => 'payée',
                 'date_paiement' => now()->format('Y-m-d H:i:s')
@@ -339,7 +372,7 @@ public function calculerTotalAvecPromotions(array $produits, $codePromo = null)
      */
     private function decrementerStock($produitId, $quantite)
     {
-        $produit = Produits::findOrFail($produitId);
+        $produit = Produit::findOrFail($produitId);
         if ($produit->stock >= $quantite) {
             $produit->decrement('stock', $quantite);
         } else {
@@ -353,7 +386,7 @@ public function calculerTotalAvecPromotions(array $produits, $codePromo = null)
     private function restaurerStock($commande)
     {
         foreach ($commande->produitCommander as $item) {
-            $produit = Produits::find($item->produit_id);
+            $produit = Produit::find($item->produit_id);
             if ($produit) {
                 $produit->increment('stock', $item->quantite);
             }
@@ -385,18 +418,18 @@ public function calculerTotalAvecPromotions(array $produits, $codePromo = null)
                     $nouveauPrix = $commandeProduit->prixU * (1 - $promotion->reduction / 100);
                     $commandeProduit->update([
                         'promo_id' => $promoId,
-                        'montant_total' => $nouveauPrix * $commandeProduit->quantite
+                        'montantTotal' => $nouveauPrix * $commandeProduit->quantite
                     ]);
                 }
             }
 
             // Recalculer le montant total de la commande
-            $nouveauTotal = $commande->produitCommander->sum('montant_total');
+            $nouveauTotal = $commande->produitCommander->sum('montantTotal');
             if ($commande->livraison) {
                 $nouveauTotal += $commande->livraison->frais_livraison ?? 0;
             }
 
-            $commande->update(['montant_total' => $nouveauTotal]);
+            $commande->update(['montantTotal' => $nouveauTotal]);
 
             return $this->show($commandeId);
         });
@@ -419,18 +452,18 @@ public function calculerTotalAvecPromotions(array $produits, $codePromo = null)
                     // Restaurer le prix original
                     $commandeProduit->update([
                         'promo_id' => null,
-                        'montant_total' => $commandeProduit->prixU * $commandeProduit->quantite
+                        'montantTotal' => $commandeProduit->prixU * $commandeProduit->quantite
                     ]);
                 }
             }
 
             // Recalculer le montant total
-            $nouveauTotal = $commande->produitCommander->sum('montant_total');
+            $nouveauTotal = $commande->produitCommander->sum('montantTotal');
             if ($commande->livraison) {
                 $nouveauTotal += $commande->livraison->frais_livraison ?? 0;
             }
 
-            $commande->update(['montant_total' => $nouveauTotal]);
+            $commande->update(['montantTotal' => $nouveauTotal]);
 
             return $this->show($commandeId);
         });
@@ -448,14 +481,14 @@ public function calculerTotalAvecPromotions(array $produits, $codePromo = null)
             // Créer une nouvelle commande
             $nouvelleCommande = Commandes::create([
                 'client_id' => $commandeOriginale->client_id,
-                'montant_total' => $commandeOriginale->montant_total,
-                'statut' => 'en_préparation'
+                'montantTotal' => $commandeOriginale->montantTotal,
+                'statut' => 'EN_ATTENTE'
             ]);
 
             // Dupliquer les produits
             foreach ($commandeOriginale->produitCommander as $produit) {
                 // Vérifier la disponibilité du stock
-                $produitModel = Produits::find($produit->produit_id);
+                $produitModel = Produit::find($produit->produit_id);
                 if (!$produitModel || $produitModel->stock < $produit->stock) {
                     throw new \Exception("Stock insuffisant pour {$produitModel->nom}");
                 }
@@ -471,7 +504,7 @@ public function calculerTotalAvecPromotions(array $produits, $codePromo = null)
                     'commande_id' => $nouvelleCommande->id,
                     'produit_id' => $produit->produit_id,
                     'quantite' => $produit->stock,
-                    'montant_total' => $produit->montant_total,
+                    'montantTotal' => $produit->montantTotal,
                     'promo_id' => $promoId
                 ]);
 
@@ -494,10 +527,10 @@ public function calculerTotalAvecPromotions(array $produits, $codePromo = null)
             if ($commandeOriginale->paiement) {
                 $this->paiementService->store([
                     'commande_id' => $nouvelleCommande->id,
-                    'mode_paiement' => $commandeOriginale->paiement->mode_paiement,
-                    'montant_payé' => $nouvelleCommande->montant_total,
+                    'modePaiement' => $commandeOriginale->paiement->modePaiement,
+                    'montant' => $nouvelleCommande->montantTotal,
                     'date_paiement' => now()->format('Y-m-d H:i:s'),
-                    'statut' => 'non_payée'
+                    'statutPaiement' => 'non_payée'
                 ]);
             }
 
@@ -514,7 +547,7 @@ public function calculerTotalAvecPromotions(array $produits, $codePromo = null)
         $disponible = true;
 
         foreach ($produits as $produitData) {
-            $produit = Produits::find($produitData['produit_id']);
+            $produit = Produit::find($produitData['produit_id']);
 
             if (!$produit) {
                 $resultats[] = [
@@ -559,8 +592,9 @@ public function calculerTotalAvecPromotions(array $produits, $codePromo = null)
             'user:id,nomComplet,email',
             'livraison.employe:id,nomComplet',
             'paiement',
-            'produitCommander.produit:id,nom,prix,image',
-            'produitCommander.promotion:id,nom,reduction'
+            'produitCommander.produit:id,nom,prix',
+            'produitCommander.produit.images',
+            'promotion:id,nom,reduction'
         ]);
 
         if (isset($criteres['client_id'])) {
@@ -586,11 +620,11 @@ public function calculerTotalAvecPromotions(array $produits, $codePromo = null)
         }
 
         if (isset($criteres['montant_min'])) {
-            $query->where('montant_total', '>=', $criteres['montant_min']);
+            $query->where('montantTotal', '>=', $criteres['montant_min']);
         }
 
         if (isset($criteres['montant_max'])) {
-            $query->where('montant_total', '<=', $criteres['montant_max']);
+            $query->where('montantTotal', '<=', $criteres['montant_max']);
         }
 
         return $query->orderBy('created_at', 'desc')->get();
@@ -614,7 +648,7 @@ public function calculerTotalAvecPromotions(array $produits, $codePromo = null)
             ->groupBy('statut')
             ->get();
 
-        $ventesParJour = Commandes::selectRaw('DATE(created_at) as date, COUNT(*) as commandes, SUM(montant_total) as chiffre_affaires')
+        $ventesParJour = Commandes::selectRaw('DATE(created_at) as date, COUNT(*) as commandes, SUM(montantTotal) as chiffre_affaires')
             ->where('created_at', '>=', $dateDebut)
             ->where('statut', '!=', 'annulée')
             ->groupBy('date')
@@ -627,10 +661,10 @@ public function calculerTotalAvecPromotions(array $produits, $codePromo = null)
             'commandes_annulees' => Commandes::where('created_at', '>=', $dateDebut)->where('statut', 'annulée')->count(),
             'chiffre_affaires' => Commandes::where('created_at', '>=', $dateDebut)
                 ->where('statut', '!=', 'annulée')
-                ->sum('montant_total'),
+                ->sum('montantTotal'),
             'panier_moyen' => Commandes::where('created_at', '>=', $dateDebut)
                 ->where('statut', '!=', 'annulée')
-                ->avg('montant_total'),
+                ->avg('montantTotal'),
             'commandes_par_statut' => $commandesParStatut,
             'evolution_ventes' => $ventesParJour,
             'clients_actifs' => Commandes::where('created_at', '>=', $dateDebut)

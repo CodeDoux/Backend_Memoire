@@ -13,9 +13,12 @@ return new class extends Migration
     {
         Schema::create('avis', function (Blueprint $table) {
             $table->id();
-            $table->foreignId('utilisateur_id')->constrained('users')->onDelete('cascade');
-            $table->tinyInteger('note'); // 1 à 5
+            $table->foreignId('client_id')->constrained('clients')->onDelete('cascade');   
+            $table->foreignId('produit_id')->constrained('produits')->onDelete('cascade');         
+            $table->tinyInteger('note')->check('note BETWEEN 1 AND 5');
             $table->text('commentaire')->nullable();
+            $table->timestamp('dateAvis')->useCurrent();
+            $table->boolean('estVerifie')->default(false);
             $table->timestamps();
         });
     }

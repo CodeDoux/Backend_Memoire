@@ -5,20 +5,18 @@ namespace App\Models;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 
-class DetailsCommande extends Model
+class LigneCommande extends Model
 {
     use HasFactory;
-     protected $table = 'details_commandes'; // Assurer le bon nom de table
+    protected $table = 'ligne_commandes'; // Assurer le bon nom de table
 
     protected $fillable = [
         'commande_id',
         'produit_id',
-        'quantte',
-        'image',
-        'prix',
-        'code', 
-        'libelle',        
-        'montant_total'   // Montant total pour cette ligne
+        'quantite',
+        'reduction',
+        'prix',       
+        'montantLigne'   // Montant total pour cette ligne
     ];
 
     protected $casts = [
@@ -36,9 +34,16 @@ class DetailsCommande extends Model
     {
         return $this->belongsTo(Commande::class, 'commande_id');
     }
+     public function Promotion()
+{
+    return $this->belongsTo(Promotion::class);
+}
 
     public function produit()
     {
+        return $this->belongsTo(Produit::class, 'produit_id');
+    }
+    public function produitCommander(){
         return $this->belongsTo(Produit::class, 'produit_id');
     }
 

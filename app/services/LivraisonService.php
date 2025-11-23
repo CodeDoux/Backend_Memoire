@@ -25,12 +25,12 @@ class LivraisonService
             if ($commande->livraison) {
                 throw new \Exception('Cette commande a déjà une livraison associée');
             }
-
+            
             $livraison = Livraison::create($data);
 
             // Mettre à jour le statut de la commande si nécessaire
-            if ($commande->statut === 'en_préparation') {
-                $commande->update(['statut' => 'prete']);
+            if ($commande->statut === 'EN_PREPARATION') {
+                $commande->update(['statut' => 'LIVREE']);
             }
 
             return $livraison->load(['commande.user']);
